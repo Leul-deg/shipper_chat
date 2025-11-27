@@ -12,3 +12,62 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique // Essential for Google OAuth
+  name      String
+  picture   String?   // URL to profile picture from Google
+  
+  isOnline  Boolean   @default(false) // Used for online/offline status (WebSocket)
+  lastSeen  DateTime? // Optional: Track last seen timestamp
+
+  // Relations
+  sentMessages  ChatMessage[] // Messages sent by this user
+  sessions      SessionParticipant[] // Sessions this user belongs to
+}
+
+
+model ChatSession {
+  id              String                @id @default(uuid())
+  
+  // A simple chat is between two users. For 1:1, this will be 2.
+  // For AI chat, one user + one 'AI' user.
+  isGroup         Boolean               @default(false) // Keep it simple for MVP (1:1 chat)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  // Relations
+  messages        ChatMessage[]         // All messages in this session
+  participants    SessionParticipant[]  // The users in this session (e.g., 2 users)
+}
+
+model SessionParticipant {
+  userId        String
+  sessionId     String
+  
+  user          User          @relation(fields: [userId], references: [id])
+  session       ChatSession   @relation(fields: [sessionId], references: [id])
+  
+  // Composite Primary Key for unique participation
+  @@id([userId, sessionId])
+}
+
+
+model ChatMessage {
+  id          String        @id @default(uuid())
+  content     String        @db.Text
+  createdAt   DateTime      @default(now())
+
+  // Sender Relation
+  senderId    String        // Foreign Key to the User who sent the message
+  sender      User          @relation(fields: [senderId], references: [id])
+
+  // Session Relation (to group the messages)
+  sessionId   String        // Foreign Key to the ChatSession
+  session     ChatSession   @relation(fields: [sessionId], references: [id])
+
+  // Optional: Read status for simple tracking
+  isRead      Boolean       @default(false)
+}
+
