@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     // Get Gemini model (using gemini-pro which is free)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro',
+      model: 'gemini-2.5-flash',
       generationConfig: {
         maxOutputTokens: 500,
         temperature: 0.7,
