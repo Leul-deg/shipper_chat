@@ -13,8 +13,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Database URL - set this in Render dashboard
+      # Supabase Database URLs - set these in Render dashboard
       - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
         sync: false
       # Better Auth secrets
       - key: BETTER_AUTH_SECRET
