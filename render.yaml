@@ -1,0 +1,43 @@
+# Render Blueprint for Shipper Chat
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Main Web Service (Next.js + WebSocket on same port)
+  - type: web
+    name: shipper-chat
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    
+    # Environment variables
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Database URL - set this in Render dashboard
+      - key: DATABASE_URL
+        sync: false
+      # Better Auth secrets
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false
+      # Google OAuth - set in Render dashboard
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Gemini AI - set in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+    
+    # Health check
+    healthCheckPath: /health
+    
+    # Auto-deploy on push
+    autoDeploy: true
+    
+    # Plan (free tier available)
+    plan: free
+    
+    # Region
+    region: oregon
