@@ -20,9 +20,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || process.env.NEXTAUTH_SECRET || "",
   trustedOrigins: [
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://shipper-chat-three.vercel.app",
-   " https://shipper-chat-v1.onrender.com" 
+    "https://shipper-chat-v1.onrender.com" 
     
   ],
   advanced: {
