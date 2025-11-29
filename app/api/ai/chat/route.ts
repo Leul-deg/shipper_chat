@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session';
 import prisma from '@/lib/prisma';
 import { getWebSocketManager } from '@/lib/websocket-manager';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { SessionParticipant } from '@prisma/client';
 
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     const isParticipant = chatSession.participants.some(
-      (p) => p.userId === session.user.id
+      (p: SessionParticipant) => p.userId === session.user.id
     );
 
     if (!isParticipant) {
