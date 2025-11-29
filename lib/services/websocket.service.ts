@@ -70,8 +70,8 @@ export class WebSocketService {
             }
         });
 
-        // Heartbeat
-        setInterval(() => this.checkConnections(), 30000);
+        // Aggressive heartbeat for Render/cloud proxies (every 25 seconds)
+        setInterval(() => this.pingAllConnections(), 25000);
     }
 
     private async addConnection(ws: WebSocket, userId: string) {
@@ -255,7 +255,12 @@ export class WebSocketService {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
     }
 
-    private checkConnections() {
+    /**
+     * Ping all connections to keep them alive through Render's proxy.
+     * Render closes idle WebSocket connections after ~60 seconds.
+     * We ping every 25 seconds to stay well under that limit.
+     */
+    private pingAllConnections() {
         const now = Date.now();
         this.connectionMetadata.forEach((meta, id) => {
             const ws = this.connections.get(id);
@@ -263,7 +268,17 @@ export class WebSocketService {
                 this.removeConnection(id);
                 return;
             }
-            if (meta.lastPing && now - meta.lastPing > 60000) ws.ping();
+            
+            // Check if connection is stale (no pong received in 60 seconds)
+            if (meta.lastPing && now - meta.lastPing > 60000) {
+                console.log(`[WS] Connection ${id} stale, terminating`);
+                ws.terminate();
+                this.removeConnection(id);
+                return;
+            }
+            
+            // Send ping to keep connection alive
+            ws.ping();
         });
     }
 

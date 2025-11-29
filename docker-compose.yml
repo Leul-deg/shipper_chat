@@ -18,19 +18,3 @@ services:
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
     restart: unless-stopped
 
-# Uncomment below if you need a local PostgreSQL instead of Supabase
-# services:
-#   db:
-#     image: postgres:15-alpine
-#     environment:
-#       - POSTGRES_USER=shipper
-#       - POSTGRES_PASSWORD=shipper_password
-#       - POSTGRES_DB=shipper_chat
-#     ports:
-#       - "5433:5432"  # Use 5433 to avoid conflict with local PostgreSQL
-#     volumes:
-#       - postgres_data:/var/lib/postgresql/data
-#     restart: unless-stopped
-#
-# volumes:
-#   postgres_data:

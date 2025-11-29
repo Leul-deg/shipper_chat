@@ -15,11 +15,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     const [isConnected, setIsConnected] = useState(false);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const messageHandlersRef = useRef<Set<(message: WebSocketMessage) => void>>(new Set());
     const reconnectAttemptsRef = useRef(0);
-    const isConnectingRef = useRef(false); // Prevent multiple simultaneous connection attempts
-    const maxReconnectAttempts = 5;
-    const reconnectInterval = 3000;
+    const isConnectingRef = useRef(false);
+    const maxReconnectAttempts = 10; // Increased for better resilience
+    const heartbeatInterval = 25000; // Send heartbeat every 25 seconds (under Render's 60s timeout)
 
     const connect = useCallback(() => {
         if (typeof window === 'undefined') return;
@@ -59,7 +60,21 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                 console.log('[WebSocket] ✅ Connection established successfully');
                 setIsConnected(true);
                 reconnectAttemptsRef.current = 0;
-                isConnectingRef.current = false; // Clear flag on success
+                isConnectingRef.current = false;
+                
+                // Start heartbeat to keep connection alive through Render's proxy
+                if (heartbeatIntervalRef.current) {
+                    clearInterval(heartbeatIntervalRef.current);
+                }
+                heartbeatIntervalRef.current = setInterval(() => {
+                    if (wsRef.current?.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ 
+                            type: 'PING', 
+                            payload: {}, 
+                            timestamp: Date.now() 
+                        }));
+                    }
+                }, heartbeatInterval);
             };
 
             ws.onmessage = (event) => {
@@ -77,21 +92,34 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
                 console.log('[WebSocket] ❌ Connection closed. Code:', event.code, 'Reason:', event.reason, 'Clean:', event.wasClean);
                 setIsConnected(false);
                 wsRef.current = null;
-                isConnectingRef.current = false; // Clear flag on close
+                isConnectingRef.current = false;
+                
+                // Clear heartbeat
+                if (heartbeatIntervalRef.current) {
+                    clearInterval(heartbeatIntervalRef.current);
+                    heartbeatIntervalRef.current = null;
+                }
 
-                // Attempt to reconnect only if not a normal closure
-                if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
-                    const timeout = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000);
+                // Reconnect on abnormal closure (1006) or other non-normal closures
+                // 1000 = normal close, 1001 = going away (page navigation)
+                const shouldReconnect = event.code !== 1000 && event.code !== 1001;
+                
+                if (shouldReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
+                    // Faster reconnect for code 1006 (abnormal closure from proxy)
+                    const baseTimeout = event.code === 1006 ? 500 : 1000;
+                    const timeout = Math.min(baseTimeout * Math.pow(1.5, reconnectAttemptsRef.current), 10000);
                     console.log(`[WebSocket] 🔄 Reconnecting in ${timeout}ms... (Attempt ${reconnectAttemptsRef.current + 1}/${maxReconnectAttempts})`);
 
                     reconnectTimeoutRef.current = setTimeout(() => {
                         reconnectAttemptsRef.current += 1;
                         connect();
                     }, timeout);
-                } else if (event.code === 1000) {
+                } else if (event.code === 1000 || event.code === 1001) {
                     console.log('[WebSocket] Normal closure, not reconnecting');
                 } else {
-                    console.error('[WebSocket] Max reconnection attempts reached');
+                    console.error('[WebSocket] Max reconnection attempts reached, will retry on user action');
+                    // Reset attempts so next user action can trigger reconnect
+                    setTimeout(() => { reconnectAttemptsRef.current = 0; }, 30000);
                 }
             };
 
@@ -109,8 +137,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
         }
+        if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+        }
         if (wsRef.current) {
-            wsRef.current.close();
+            wsRef.current.close(1000, 'Client disconnecting'); // Normal closure
             wsRef.current = null;
         }
         setIsConnected(false);
