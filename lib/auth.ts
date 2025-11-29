@@ -21,7 +21,8 @@ export const auth = betterAuth({
   trustedOrigins: [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "shipper-chat-three.vercel.app"
+    "https://shipper-chat-three.vercel.app"
+    
   ],
   advanced: {
     cookies: {
