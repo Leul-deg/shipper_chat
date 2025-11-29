@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
 
   // Allow cross-origin requests from 127.0.0.1 in development
   // This fixes the warning about cross-origin requests when accessing via 127.0.0.1
-  allowedDevOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000'],
+  allowedDevOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000', 'https://shipper-chat-three.vercel.app'],
 };
 
 export default nextConfig;
