@@ -5,7 +5,6 @@
 # ================================
 FROM node:20-alpine AS base
 
-# Install dependencies for Prisma and native modules
 RUN apk add --no-cache libc6-compat openssl
 
 WORKDIR /app
@@ -17,7 +16,6 @@ FROM base AS deps
 
 COPY package.json package-lock.json* ./
 
-# Install all dependencies
 RUN npm ci
 
 # ================================
@@ -27,14 +25,12 @@ FROM base AS builder
 
 WORKDIR /app
 
-# Copy dependencies
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy?schema=public"
 RUN npx prisma generate
 
-# Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
@@ -50,45 +46,41 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Create non-root user FIRST
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
-# Copy package files
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json ./
+# Copy with correct ownership using --chown (much faster than chown -R)
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/package-lock.json ./
 
-# Install production deps + tsx for running TypeScript server
-RUN npm ci --only=production && npm install tsx
+# Install production deps + tsx
+RUN npm ci --omit=dev && npm install tsx
 
-# Copy Prisma
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Copy Prisma with ownership
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
-# Copy built Next.js
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
+# Copy built Next.js with ownership
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy server and lib (TypeScript files)
-COPY --from=builder /app/server.ts ./
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/types ./types
+# Copy server files with ownership
+COPY --from=builder --chown=nextjs:nodejs /app/server.ts ./
+COPY --from=builder --chown=nextjs:nodejs /app/lib ./lib
+COPY --from=builder --chown=nextjs:nodejs /app/types ./types
 
-# Copy configs
-COPY --from=builder /app/next.config.ts ./
-COPY --from=builder /app/tsconfig.json ./
-
-RUN chown -R nextjs:nodejs /app
+# Copy configs with ownership
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./
 
 USER nextjs
 
-# Single port for both HTTP and WebSocket
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-# Run with tsx for TypeScript support
 CMD ["npx", "tsx", "server.ts"]
