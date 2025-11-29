@@ -1,0 +1,64 @@
+# Render Blueprint for Shipper Chat
+# https://render.com/docs/blueprint-spec
+
+services:
+  # Main Web Service (Next.js + WebSocket on same port)
+  - type: web
+    name: shipper-chat
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    
+    # Render auto-detects the PORT env var
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is automatically set by Render
+      # Database URL - set this in Render dashboard or use a Render PostgreSQL
+      - key: DATABASE_URL
+        sync: false  # Must be set manually in Render dashboard
+      # Better Auth secrets
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        sync: false  # Set to your Render URL (e.g., https://shipper-chat.onrender.com)
+      # Google OAuth - set in Render dashboard
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Gemini AI - set in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false
+      # NEXT_PUBLIC_WS_URL is NOT needed - WebSocket uses same domain automatically
+    
+    # Health check
+    healthCheckPath: /
+    
+    # Build command - run Prisma migrations before starting
+    buildCommand: |
+      npm ci
+      npx prisma generate
+      npm run build
+      npx tsc server.ts --outDir . --esModuleInterop --module commonjs --target ES2017 --skipLibCheck --resolveJsonModule
+    
+    # Start command
+    startCommand: npx prisma migrate deploy && node server.js
+    
+    # Auto-deploy on push
+    autoDeploy: true
+    
+    # Plan (free tier available)
+    plan: free
+    
+    # Region
+    region: oregon
+
+# Optional: Render PostgreSQL Database
+# Uncomment if you want Render to manage your database
+# databases:
+#   - name: shipper-chat-db
+#     plan: free
+#     region: oregon
+#     postgresMajorVersion: 15
+

@@ -25,9 +25,10 @@ export async function broadcastToUsersAcrossProcesses(
     return true;
   }
 
-  // Fall back to internal HTTP endpoint on the WebSocket server
+  // Fall back to internal HTTP endpoint on the same server
   try {
-    const response = await fetch('http://localhost:3001/internal/broadcast', {
+    const port = process.env.PORT || '3000';
+    const response = await fetch(`http://localhost:${port}/internal/broadcast`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userIds, message }),

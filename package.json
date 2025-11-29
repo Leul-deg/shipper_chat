@@ -6,9 +6,15 @@
     "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx watch server.ts",
     "dev:next": "next dev",
     "build": "next build",
+    "build:server": "tsc server.ts --outDir . --esModuleInterop --module commonjs --target ES2017 --skipLibCheck --resolveJsonModule",
+    "build:all": "npm run build && npm run build:server",
     "start": "NODE_ENV=production node server.js",
     "start:next": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "docker:build": "sudo docker build -t shipper-chat .",
+    "docker:run": "sudo docker run -p 3000:3000 --env-file .env.local shipper-chat"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

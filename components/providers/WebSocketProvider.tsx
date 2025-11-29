@@ -30,9 +30,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
+        // WebSocket connects to the same host/port as the main app
+        // In production (Render), this uses the same domain
+        // NEXT_PUBLIC_WS_URL can override if needed (e.g., for separate WS server)
+        const wsUrlOverride = process.env.NEXT_PUBLIC_WS_URL;
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const hostname = window.location.hostname;
-        const url = `${protocol}//${hostname}:3001/api/ws`;
+        const url = wsUrlOverride 
+            ? `${wsUrlOverride}/api/ws`
+            : `${protocol}//${window.location.host}/api/ws`;
 
         if (wsRef.current?.readyState === WebSocket.OPEN) {
             console.log('[WebSocket] Already connected, skipping');
