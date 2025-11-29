@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050b15;
+  --foreground: #e2e8f0;
+  --surface: #0f1b33;
+  --surface-soft: #131f38;
+  --surface-alt: #172740;
+  --border: rgba(226, 232, 240, 0.15);
+  --accent: #38bdf8;
+  --accent-strong: #a855f7;
+  --muted: #94a3b8;
 }
 
 @theme inline {
@@ -12,15 +19,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #f5f7ff;
+    --foreground: #111827;
+    --surface: #ffffff;
+    --surface-soft: #f1f5f9;
+    --surface-alt: #e2e8f0;
+    --border: rgba(15, 23, 42, 0.12);
+    --accent: #2563eb;
+    --accent-strong: #7c3aed;
+    --muted: #64748b;
   }
 }
 
 body {
-  background: var(--background);
+  background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.15), transparent 35%),
+    radial-gradient(circle at 30% 20%, rgba(168, 85, 247, 0.12), transparent 40%), var(--surface);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
