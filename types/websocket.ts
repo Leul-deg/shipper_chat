@@ -4,6 +4,8 @@ export type WebSocketMessageType =
   | 'USER_OFFLINE'
   | 'MESSAGE_SENT'
   | 'MESSAGE_RECEIVED'
+  | 'SESSION_CREATED'
+  | 'SESSION_DELETED'
   | 'TYPING_START'
   | 'TYPING_STOP'
   | 'READ_RECEIPT'

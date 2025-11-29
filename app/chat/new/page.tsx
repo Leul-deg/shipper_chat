@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 
-export default function NewChatPage() {
+function NewChatContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { data: session, isPending } = useSession();
@@ -47,7 +47,6 @@ export default function NewChatPage() {
         }
 
         const data = await response.json();
-        // Redirect to chat page
         router.push(`/chat/${data.session.id}`);
       } catch (err) {
         console.error('Error creating session:', err);
@@ -57,7 +56,7 @@ export default function NewChatPage() {
     };
 
     createSession();
-  }, [userId, session, status, router]);
+  }, [userId, session, isPending, router]);
 
   if (loading) {
     return (
@@ -89,3 +88,16 @@ export default function NewChatPage() {
   return null;
 }
 
+export default function NewChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-300 border-t-blue-600" />
+        </div>
+      }
+    >
+      <NewChatContent />
+    </Suspense>
+  );
+}

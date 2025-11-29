@@ -153,12 +153,19 @@ export class WebSocketService {
                     message.payload.content
                 );
 
-                // Broadcast to participants
+                // Broadcast to ALL participants including sender
+                // Sender needs this to replace their optimistic message with the real one
                 await this.broadcastToSession(message.payload.sessionId, {
                     type: 'MESSAGE_RECEIVED',
-                    payload: { ...message.payload, id: savedMsg.id, createdAt: savedMsg.createdAt.toISOString() },
+                    payload: {
+                        ...message.payload,
+                        id: savedMsg.id,
+                        messageId: savedMsg.id, // Include both for compatibility
+                        senderId: meta.userId,
+                        createdAt: savedMsg.createdAt.toISOString(),
+                    },
                     timestamp: Date.now()
-                }, meta.userId);
+                }); // No excludeUserId - sender needs the confirmed message too
                 break;
 
             case 'TYPING_START':
@@ -198,7 +205,9 @@ export class WebSocketService {
             if (conns) {
                 conns.forEach(connId => {
                     const ws = this.connections.get(connId);
-                    if (ws?.readyState === WebSocket.OPEN) ws.send(messageStr);
+                    if (ws?.readyState === WebSocket.OPEN) {
+                        ws.send(messageStr);
+                    }
                 });
             }
         }
@@ -206,6 +215,24 @@ export class WebSocketService {
 
     public async broadcastMessageToSession(sessionId: string, message: WebSocketMessage, excludeUserId?: string) {
         await this.broadcastToSession(sessionId, message, excludeUserId);
+    }
+
+    /**
+     * Broadcast a message directly to specific users by their IDs.
+     * Use this when you can't rely on session participants (e.g., after session deletion).
+     */
+    public broadcastToUsers(userIds: string[], message: WebSocketMessage, excludeUserId?: string) {
+        const messageStr = JSON.stringify(message);
+        for (const userId of userIds) {
+            if (userId === excludeUserId) continue;
+            const conns = this.userConnections.get(userId);
+            if (conns) {
+                conns.forEach(connId => {
+                    const ws = this.connections.get(connId);
+                    if (ws?.readyState === WebSocket.OPEN) ws.send(messageStr);
+                });
+            }
+        }
     }
 
     private async broadcastUserStatus(userId: string, isOnline: boolean) {
@@ -238,5 +265,12 @@ export class WebSocketService {
             }
             if (meta.lastPing && now - meta.lastPing > 60000) ws.ping();
         });
+    }
+
+    /**
+     * Get the current number of active connections (for health checks)
+     */
+    public getConnectionCount(): number {
+        return this.connections.size;
     }
 }

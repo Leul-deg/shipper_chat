@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useSession, signOut } from '@/lib/auth-client';
 import { useRouter } from 'next/navigation';
@@ -8,6 +8,7 @@ import ChatWindow from '@/components/ChatWindow';
 import SessionList from '@/components/SessionList';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import LogoBadge from '@/components/LogoBadge';
+import AIInfoCard from '@/components/AIInfoCard';
 import { startAIChatSession } from '@/lib/services/ai.service';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import type { WebSocketMessage } from '@/types/websocket';
@@ -44,6 +45,15 @@ export default function ChatsPage() {
     const [searchResults, setSearchResults] = useState<User[]>([]);
     const [searching, setSearching] = useState(false);
 
+    const filteredSearchResults = useMemo(() => {
+        if (!session) return [];
+        return searchResults.filter(
+            (user) =>
+                user.id !== session.user.id &&
+                user.id !== activeChatSession?.otherParticipant?.id
+        );
+    }, [searchResults, session, activeChatSession]);
+
     const userParticipant = activeChatSession?.otherParticipant ?? null;
     const [aiLoading, setAILoading] = useState(false);
     const [aiError, setAIError] = useState<string | null>(null);
@@ -52,42 +62,22 @@ export default function ChatsPage() {
         setAIError(null);
         setAILoading(true);
         try {
-        if (!session?.user?.id) return;
-        const aiSession = await startAIChatSession();
+            const aiSession = await startAIChatSession();
             setActiveSessionId(aiSession.id);
         } catch (error) {
             console.error('Failed to start AI chat:', error);
-            const message = error instanceof Error ? error.message : 'Failed to start AI chat.';
-            setAIError(message);
+            setAIError(error instanceof Error ? error.message : 'Failed to start AI chat.');
         } finally {
             setAILoading(false);
         }
     };
 
     const aiCard = (
-        <div className="space-y-3 rounded-3xl border border-white/10 bg-[#0f172a]/80 p-5 text-white shadow-[0_20px_40px_rgba(2,6,23,0.55)]">
-            <div>
-                <p className="text-[12px] uppercase tracking-[0.5em] text-slate-500">
-                    Chat with AI
-                </p>
-                <p className="text-lg font-semibold text-white">
-                    Ask the built-in assistant
-                </p>
-            </div>
-            <p className="text-sm text-slate-300">
-                Get instant answers, summaries, or help composing a message without leaving this space.
-            </p>
-            <button
-                className="w-full rounded-2xl border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/40 disabled:border-white/10 disabled:text-slate-400"
-                disabled={aiLoading}
-                onClick={handleStartAIChat}
-            >
-                {aiLoading ? 'Starting...' : 'Open AI chat'}
-            </button>
-            {aiError && (
-                <p className="text-xs text-rose-400">{aiError}</p>
-            )}
-        </div>
+        <AIInfoCard
+            onStartAIChat={handleStartAIChat}
+            isLoading={aiLoading}
+            error={aiError}
+        />
     );
 
     const userCard = userParticipant ? (
@@ -104,7 +94,7 @@ export default function ChatsPage() {
                             unoptimized
                         />
                     ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#38bdf8] to-[#a855f7] text-white font-semibold text-xl">
+                        <div className="flex h-full w-full items-center justify-center bg-linear-gradient(to right, #38bdf8, #a855f7) text-white font-semibold text-xl">
                             {userParticipant.name.charAt(0).toUpperCase()}
                         </div>
                     )}
@@ -122,7 +112,7 @@ export default function ChatsPage() {
                 <p className="text-[11px] uppercase tracking-[0.4em] text-slate-500">
                     Email
                 </p>
-                <p className="text-sm text-white/90 break-words">
+                <p className="text-sm text-white/90 wrap-break-word whitespace-pre-wrap">
                     {userParticipant.email || 'Not provided'}
                 </p>
             </div>
@@ -174,6 +164,16 @@ export default function ChatsPage() {
 
     useEffect(() => {
         const unsubscribe = subscribe((message: WebSocketMessage) => {
+            // Handle session deletion - close chat if it was deleted by the other user
+            if (message.type === 'SESSION_DELETED') {
+                const { sessionId } = message.payload;
+                if (activeSessionId === sessionId) {
+                    setActiveSessionId(null);
+                    setActiveChatSession(null);
+                }
+            }
+
+            // Handle online/offline status updates
             if (activeChatSession && (message.type === 'USER_ONLINE' || message.type === 'USER_OFFLINE')) {
                 const userId = message.payload.userId;
                 const isOnline = message.payload.isOnline;
@@ -194,7 +194,7 @@ export default function ChatsPage() {
         });
 
         return unsubscribe;
-    }, [subscribe, activeChatSession]);
+    }, [subscribe, activeChatSession, activeSessionId]);
 
     // Search users
     useEffect(() => {
@@ -209,7 +209,7 @@ export default function ChatsPage() {
                 const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
                 if (!response.ok) throw new Error('Search failed');
                 const data = await response.json();
-                setSearchResults(data.users || []);
+    setSearchResults(data.users || []);
             } catch (error) {
                 console.error('Error searching users:', error);
                 setSearchResults([]);
@@ -231,7 +231,7 @@ export default function ChatsPage() {
             const response = await fetch('/api/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: session.user.id, otherUserId: userId }),
+                body: JSON.stringify({ userId: session?.user?.id, otherUserId: userId }),
             });
 
             const data = await response.json();
@@ -259,7 +259,7 @@ export default function ChatsPage() {
     }
 
     return (
-        <div className="flex h-screen flex-col bg-gradient-to-b from-[#050b15] via-[#070d1b] to-[#0b1224] text-slate-100 overflow-hidden">
+        <div className="flex h-screen flex-col bg-linear-to-b from-[#050b15] via-[#070d1b] to-[#0b1224] text-slate-100 overflow-hidden">
             {/* Header - Clean Apple Style */}
             <header className="border-b border-white/10 bg-[#0d1526]/90 px-6 py-4 z-20 shadow-[0_20px_60px_rgba(2,6,23,0.65)]">
                 <div className="flex items-center w-full justify-between">
@@ -278,9 +278,9 @@ export default function ChatsPage() {
             </header>
 
             {/* Main Content */}
-            <div className="flex flex-1 overflow-hidden w-full py-4 px-6 gap-4">
+            <div className="flex flex-1 flex-col lg:flex-row overflow-hidden w-full py-4 px-4 lg:px-6 gap-4">
                 {/* Sidebar - Clean & Airy */}
-                <aside className="w-[260px] border-r border-white/10 bg-[#0b1224]/80 flex flex-col z-10 shadow-[0_30px_60px_rgba(1,4,17,0.65)] backdrop-blur-lg">
+                <aside className="lg:w-[260px] w-full border-r lg:border-r border-white/10 bg-[#0b1224]/80 flex flex-col z-10 shadow-[0_30px_60px_rgba(1,4,17,0.65)] backdrop-blur-lg">
                     {/* Search Bar */}
                     <div className="p-4">
                         <div className="relative">
@@ -304,7 +304,7 @@ export default function ChatsPage() {
                     </div>
 
                     {/* Search Results or Session List */}
-                                    <div className="flex-1 overflow-y-auto px-2 no-scrollbar">
+                    <div className="flex-1 overflow-y-auto px-2 no-scrollbar">
                         {searchQuery.trim() ? (
                             // Search Results
                             <div className="space-y-1">
@@ -312,20 +312,14 @@ export default function ChatsPage() {
                                     <div className="flex justify-center py-12">
                                                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-[#38bdf8]" />
                                     </div>
-                                ) : searchResults.length > 0 ? (
-                                    searchResults
-                                        .filter(
-                                            (user) =>
-                                                user.id !== session.user.id &&
-                                                user.id !== activeChatSession?.otherParticipant?.id
-                                        )
-                                        .map((user) => (
+                        ) : filteredSearchResults.length > 0 ? (
+                            filteredSearchResults.map((user) => (
                                         <button
                                             key={user.id}
                                             onClick={() => handleUserClick(user.id)}
                                                     className="group flex w-full items-center gap-3 rounded-2xl p-3 transition-all hover:bg-[#16243d]"
                                         >
-                                            <div className="relative flex-shrink-0">
+                                            <div className="relative shrink-0">
                                                         <div className="h-11 w-11 overflow-hidden rounded-full bg-white/5 ring-2 ring-transparent group-hover:ring-white/40 transition-all">
                                                     {user.picture ? (
                                                         <img
@@ -334,7 +328,7 @@ export default function ChatsPage() {
                                                             className="h-full w-full object-cover"
                                                         />
                                                     ) : (
-                                                                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#38bdf8] to-[#a855f7] text-white font-medium text-sm">
+                                                                <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-[#38bdf8] to-[#a855f7] text-white font-medium text-sm">
                                                             {user.name.charAt(0).toUpperCase()}
                                                         </div>
                                                     )}
@@ -371,13 +365,16 @@ export default function ChatsPage() {
                                 currentUserId={session.user.id}
                                 activeSessionId={activeSessionId || undefined}
                                 onSessionClick={(s) => setActiveSessionId(s.id)}
+                                onSessionDelete={(deletedId) => {
+                                    setActiveSessionId((prev) => (prev === deletedId ? null : prev));
+                                }}
                             />
                         )}
                     </div>
                 </aside>
 
                 {/* Chat Window */}
-                <main className="flex flex-1 overflow-hidden relative lg:gap-6">
+                <main className="flex flex-1 flex-col lg:flex-row overflow-hidden relative lg:gap-6">
                     <div className="flex-1 min-h-0">
                     {activeSessionId && activeChatSession ? (
                         loading ? (
@@ -394,7 +391,7 @@ export default function ChatsPage() {
                     ) : (
                         <div className="flex flex-1 items-center justify-center relative z-10">
                                 <div className="text-center max-w-md px-8 py-10 bg-[#0f172a]/90 rounded-3xl shadow-[0_20px_60px_rgba(2,6,23,0.55)] border border-white/10">
-                                    <div className="mx-auto mb-5 h-20 w-20 rounded-full bg-gradient-to-br from-[#38bdf8]/30 to-[#a855f7]/30 flex items-center justify-center">
+                                    <div className="mx-auto mb-5 h-20 w-20 rounded-full bg-linear-gradient(to right, #38bdf8, #a855f7) flex items-center justify-center">
                                         <svg className="h-10 w-10 text-[#38bdf8]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                     </svg>
@@ -409,7 +406,7 @@ export default function ChatsPage() {
                         </div>
                     )}
                     </div>
-                    <aside className="hidden w-[280px] flex-shrink-0 flex-col gap-6 self-start rounded-3xl border border-white/10 bg-[#0f172a]/80 p-5 text-white shadow-[0_30px_60px_rgba(2,6,23,0.6)] lg:flex ml-auto max-h-[70%]">
+                    <aside className="hidden w-[280px] shrink-0 flex-col gap-6 self-start rounded-3xl border border-white/10 bg-[#0f172a]/80 p-5 text-white shadow-[0_30px_60px_rgba(2,6,23,0.6)] lg:flex ml-auto max-h-[70%]">
                         {userCard}
                         {aiCard}
                     </aside>

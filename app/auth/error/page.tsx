@@ -1,9 +1,10 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function AuthErrorPage() {
+function AuthErrorContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
 
@@ -33,6 +34,11 @@ export default function AuthErrorPage() {
         return {
           title: 'OAuth Callback Error',
           message: 'There was an error processing the OAuth callback. This might be due to database connection issues or user creation problems. Please check the server logs for more details.',
+        };
+      case 'invalid_code':
+        return {
+          title: 'Connection Timeout',
+          message: 'The sign-in request timed out. This is usually a temporary network issue. Please try again.',
         };
       default:
         return {
@@ -86,3 +92,16 @@ export default function AuthErrorPage() {
   );
 }
 
+export default function AuthErrorPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-300 border-t-blue-600" />
+        </div>
+      }
+    >
+      <AuthErrorContent />
+    </Suspense>
+  );
+}

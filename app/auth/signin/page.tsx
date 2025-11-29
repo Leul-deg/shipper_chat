@@ -1,12 +1,11 @@
 'use client';
 
+import { Suspense, useState } from 'react';
 import { signIn } from '@/lib/auth-client';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function SignInPage() {
+function SignInContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
   const error = searchParams.get('error');
   const [isLoading, setIsLoading] = useState(false);
@@ -119,3 +118,16 @@ export default function SignInPage() {
   );
 }
 
+export default function SignInPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-300 border-t-blue-600" />
+        </div>
+      }
+    >
+      <SignInContent />
+    </Suspense>
+  );
+}

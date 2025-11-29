@@ -26,6 +26,7 @@ interface ChatWindowProps {
   otherParticipant?: {
     id: string;
     name: string;
+    email?: string | null;
     picture: string | null;
     isOnline: boolean;
   } | null;
@@ -87,58 +88,66 @@ export default function ChatWindow({
         message.type === 'MESSAGE_RECEIVED' &&
         message.payload?.sessionId === sessionId
       ) {
-        // Add new message to the list
+        // Get the real message ID (server sends both id and messageId for compatibility)
+        const realMessageId = message.payload.messageId || message.payload.id;
         const other = otherParticipant;
+        const isOwnMessage = message.payload.senderId === currentUserId;
         const isOtherSender = other && message.payload.senderId === other.id;
 
         const newMessage: Message = {
-          id: message.payload.messageId,
+          id: realMessageId,
           content: message.payload.content,
           senderId: message.payload.senderId,
           sender: {
             id: message.payload.senderId,
             name: isOtherSender
               ? other.name
-              : message.payload.senderId === currentUserId
+              : isOwnMessage
                 ? 'You'
                 : 'User',
             picture: isOtherSender ? other.picture : null,
           },
           createdAt: message.payload.createdAt,
-          isRead: false,
+          isRead: isOwnMessage, // Own messages are "read" by definition
         };
 
         setMessages((prev) => {
-          const deduped = prev.filter((msg) => {
+          // Remove any pending optimistic message that matches this confirmed message
+          const withoutPending = prev.filter((msg) => {
+            // Remove pending messages from same sender with same content
             if (
-              msg.id &&
-              msg.id.startsWith('pending-') &&
+              msg.id?.startsWith('pending-') &&
               msg.senderId === message.payload.senderId &&
               msg.content === message.payload.content
             ) {
               return false;
             }
-            return msg.id !== message.payload.messageId;
+            return true;
           });
-          if (deduped.some((msg) => msg.id === newMessage.id)) {
-            return deduped;
+
+          // Don't add if we already have this exact message ID
+          if (withoutPending.some((msg) => msg.id === realMessageId)) {
+            return withoutPending;
           }
-          return [...deduped, newMessage];
+
+          return [...withoutPending, newMessage];
         });
 
-        // Mark as read if it's not from current user
-        if (message.payload.senderId !== currentUserId) {
-          fetch(`/api/messages/${newMessage.id}`, { method: 'PATCH' }).catch(
+        // Mark as read if it's not from current user (send read receipt)
+        if (!isOwnMessage) {
+          fetch(`/api/messages/${realMessageId}`, { method: 'PATCH' }).catch(
             console.error
           );
         }
 
         // Clear typing indicator when message is received
-        setTypingUsers((prev) => {
-          const next = new Set(prev);
-          next.delete(message.payload.senderId);
-          return next;
-        });
+        if (!isOwnMessage) {
+          setTypingUsers((prev) => {
+            const next = new Set(prev);
+            next.delete(message.payload.senderId);
+            return next;
+          });
+        }
       } else if (
         (message.type === 'TYPING_START' || message.type === 'TYPING_STOP') &&
         message.payload?.sessionId === sessionId &&

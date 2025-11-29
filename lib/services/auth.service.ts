@@ -13,7 +13,7 @@ export class AuthService {
     }
 
     async validateSession(token: string): Promise<User | null> {
-        // Deprecated: Use validateSessionFromHeaders instead
+       
         const session = await this.sessionRepo.findByToken(token);
         if (!session) return null;
         return session.user;
@@ -32,11 +32,10 @@ export class AuthService {
     }
 
     async extractSessionToken(cookies: string): Promise<string | null> {
-        // Try Better Auth cookie name first
+     
         let match = cookies.match(/better-auth\.session_token=([^;]+)/);
         if (match) return match[1];
 
-        // Fallback to legacy NextAuth cookie name for migration
         match = cookies.match(/next-auth\.session-token=([^;]+)/);
         return match ? match[1] : null;
     }

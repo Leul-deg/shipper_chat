@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 // PATCH: Mark message as read
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { messageId: string } }
+  { params }: { params: Promise<{ messageId: string }> }
 ) {
   try {
     const session = await getSession();
@@ -14,7 +14,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { messageId } = params;
+    const { messageId } = await params;
 
     // Get message to verify access
     const message = await prisma.chatMessage.findUnique({

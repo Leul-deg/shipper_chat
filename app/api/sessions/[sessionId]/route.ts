@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import prisma from '@/lib/prisma';
+import { broadcastToUsersAcrossProcesses } from '@/lib/websocket-manager';
 
 // GET: Get session details
 export async function GET(
@@ -137,10 +138,26 @@ export async function DELETE(
       );
     }
 
+    // Capture participants before delete for WebSocket broadcast
+    const participantUserIds = chatSession.participants.map((p) => p.userId);
+
     // Delete session (cascade will delete messages and participants)
     await prisma.chatSession.delete({
       where: { id: sessionId },
     });
+
+    // Notify participants over WebSocket
+    // Use cross-process broadcast since API routes may run in separate workers
+    await broadcastToUsersAcrossProcesses(
+      participantUserIds,
+      {
+        type: 'SESSION_DELETED',
+        payload: {
+          sessionId,
+        },
+        timestamp: Date.now(),
+      }
+    );
 
     return NextResponse.json({ message: 'Session deleted successfully' });
   } catch (error) {

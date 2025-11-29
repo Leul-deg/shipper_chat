@@ -8,9 +8,9 @@ export async function middleware(request: NextRequest) {
     const response = await auth.api.getSession({
       headers: request.headers,
     });
-    // Better Auth returns { data: { user: ..., session: ... }, error: null } or { data: null, error: ... }
-    if (response && response.data && response.data.user) {
-      session = { user: response.data.user };
+    // Better Auth returns { session: ..., user: ... } directly
+    if (response?.user) {
+      session = { user: response.user };
     }
   } catch (error) {
     // Session check failed, treat as unauthenticated

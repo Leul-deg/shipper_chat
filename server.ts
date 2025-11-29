@@ -1,4 +1,4 @@
-import { createServer } from 'http';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { WebSocketService } from './lib/services/websocket.service';
@@ -27,9 +27,47 @@ app.prepare().then(() => {
     });
 
     // Initialize WebSocket Service on a separate server to avoid Next.js conflicts
-    const wsServer = createServer();
     const webSocketService = new WebSocketService();
     setWebSocketManager(webSocketService);
+
+    // Create WebSocket server with internal broadcast endpoint
+    const wsServer = createServer((req: IncomingMessage, res: ServerResponse) => {
+        // Handle internal broadcast endpoint for cross-process communication
+        if (req.method === 'POST' && req.url === '/internal/broadcast') {
+            let body = '';
+            req.on('data', (chunk) => { body += chunk; });
+            req.on('end', () => {
+                try {
+                    const { userIds, message } = JSON.parse(body);
+                    if (Array.isArray(userIds) && message) {
+                        webSocketService.broadcastToUsers(userIds, message);
+                        console.log('[WS Server] Internal broadcast to users:', userIds, 'type:', message.type);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ success: true }));
+                    } else {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Invalid payload' }));
+                    }
+                } catch (error) {
+                    console.error('[WS Server] Internal broadcast error:', error);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Internal error' }));
+                }
+            });
+            return;
+        }
+
+        // Health check
+        if (req.method === 'GET' && req.url === '/health') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'ok', connections: webSocketService.getConnectionCount?.() ?? 'unknown' }));
+            return;
+        }
+
+        // Default: not found
+        res.writeHead(404);
+        res.end();
+    });
 
     wsServer.on('upgrade', (request, socket, head) => {
         const { pathname } = parse(request.url || '', true);
@@ -42,9 +80,10 @@ app.prepare().then(() => {
         }
     });
 
-    // Listen on port 3001 for WebSockets
+    // Listen on port 3001 for WebSockets and internal HTTP
     wsServer.listen(3001, () => {
         console.log('> WebSocket server ready on ws://localhost:3001/api/ws');
+        console.log('> Internal broadcast endpoint on http://localhost:3001/internal/broadcast');
     });
 
     server.listen(port, hostname, () => {

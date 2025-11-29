@@ -4,7 +4,6 @@ import prisma from '@/lib/prisma';
 import { getWebSocketManager } from '@/lib/websocket-manager';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Check if Gemini is configured
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -23,7 +22,6 @@ const getGeminiClient = () => {
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
-
     if (!session || !session.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -122,14 +120,8 @@ export async function POST(request: NextRequest) {
     const response = await result.response;
     const aiResponse = response.text() || 'Sorry, I could not generate a response.';
 
-    // Save user message
-    const userMessage = await prisma.chatMessage.create({
-      data: {
-        content: message.trim(),
-        senderId: session.user.id,
-        sessionId,
-      },
-    });
+    // Note: User message is already saved via WebSocket MESSAGE_SENT handler
+    // We only need to save the AI response here
 
     let aiUserId = process.env.AI_USER_ID;
     let aiUser = aiUserId
@@ -192,13 +184,6 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      userMessage: {
-        id: userMessage.id,
-        content: userMessage.content,
-        senderId: userMessage.senderId,
-        sessionId: userMessage.sessionId,
-        createdAt: userMessage.createdAt.toISOString(),
-      },
       aiMessage: {
         id: aiMessage.id,
         content: aiMessage.content,

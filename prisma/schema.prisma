@@ -46,15 +46,15 @@ model ChatSession {
   updatedAt DateTime @updatedAt
 
   // Relations
-  messages     ChatMessage[] // All messages in this session
-  participants SessionParticipant[] // The users in this session (e.g., 2 users)
+  messages     ChatMessage[]        @relation("SessionMessages")
+  participants SessionParticipant[] @relation("ChatSessionParticipant")
 }
 
 model SessionParticipant {
   userId    String
   sessionId String
   user      User        @relation("ChatSessionParticipant", fields: [userId], references: [id])
-  session   ChatSession @relation(fields: [sessionId], references: [id])
+  session   ChatSession @relation("ChatSessionParticipant", fields: [sessionId], references: [id], onDelete: Cascade)
   // Composite Primary Key for unique participation
   @@id([userId, sessionId])
 }
@@ -70,7 +70,7 @@ model ChatMessage {
 
   // Session Relation (to group the messages)
   sessionId String // Foreign Key to the ChatSession
-  session   ChatSession @relation(fields: [sessionId], references: [id])
+  session   ChatSession @relation("SessionMessages", fields: [sessionId], references: [id], onDelete: Cascade)
 
   // Optional: Read status for simple tracking
   isRead Boolean @default(false)

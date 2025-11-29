@@ -60,7 +60,6 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             ws.onmessage = (event) => {
                 try {
                     const message: WebSocketMessage = JSON.parse(event.data);
-                    // Call all registered message handlers
                     messageHandlersRef.current.forEach((handler) => {
                         handler(message);
                     });

@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession, signOut } from '@/lib/auth-client';
 import ChatWindow from '@/components/ChatWindow';
 import SessionList from '@/components/SessionList';
-import UserList from '@/components/UserList';
 import UserProfile from '@/components/UserProfile';
 
 interface Session {

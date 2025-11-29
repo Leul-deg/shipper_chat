@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { KeyboardEvent, useEffect, useState, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -32,17 +32,63 @@ interface Session {
 interface SessionListProps {
   currentUserId?: string;
   onSessionClick?: (session: Session) => void;
+  onSessionDelete?: (sessionId: string) => void;
   activeSessionId?: string;
 }
+
+const getMessageTextClass = (isActive: boolean, unreadCount: number) => {
+  if (isActive) return 'text-white/90';
+  if (unreadCount > 0) return 'font-medium text-white';
+  return 'text-slate-400';
+};
 
 export default function SessionList({
   currentUserId,
   onSessionClick,
+  onSessionDelete,
   activeSessionId,
 }: SessionListProps) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Session | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/sessions/${pendingDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to delete session';
+        try {
+          const body = await response.json();
+          errorMessage = body?.error || body?.message || errorMessage;
+        } catch {
+          const text = await response.text().catch(() => '');
+          if (text) {
+            errorMessage = text;
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      setSessions((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+      onSessionDelete?.(pendingDelete.id);
+      if (activeSessionId === pendingDelete.id) {
+        router.push('/chats');
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('Failed to delete the session. Please try again.');
+    } finally {
+      setPendingDelete(null);
+      setIsDeleting(false);
+    }
+  };
   const router = useRouter();
 
   const { subscribe } = useWebSocket();
@@ -90,54 +136,61 @@ export default function SessionList({
             return session;
           })
         );
+      } else if (message.type === 'SESSION_CREATED') {
+        // A new session was created; refresh from server so both sides see it
+        fetchSessions();
+      } else if (message.type === 'SESSION_DELETED') {
+        // A session was deleted; remove it from local state immediately
+        const { sessionId } = message.payload;
+        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       } else if (message.type === 'MESSAGE_RECEIVED') {
-        // Also update last message when new message arrives
-        const { sessionId, content, senderId, createdAt, id } = message.payload;
+        const { sessionId, content, senderId, createdAt } = message.payload;
+        const messageId = message.payload.messageId || message.payload.id;
 
         setSessions((prevSessions) => {
-          const sessionIndex = prevSessions.findIndex(s => s.id === sessionId);
-          if (sessionIndex === -1) return prevSessions;
+          const sessionIndex = prevSessions.findIndex((s) => s.id === sessionId);
 
-          const updatedSessions = [...prevSessions];
-          const session = updatedSessions[sessionIndex];
+          // If session not in list, fetch sessions to get the new one
+          if (sessionIndex === -1) {
+            setTimeout(() => fetchSessions(), 100);
+            return prevSessions;
+          }
 
-          updatedSessions[sessionIndex] = {
+          const session = prevSessions[sessionIndex];
+          const isOwnMessage = senderId === currentUserId;
+          const isActive = sessionId === activeSessionId;
+          const unreadCount =
+            !isOwnMessage && !isActive ? session.unreadCount + 1 : session.unreadCount;
+
+          const updatedSession: Session = {
             ...session,
             lastMessage: {
-              id,
+              id: messageId,
               content,
               senderId,
-              senderName: 'User', // We might not have name here, but that's ok
+              senderName: isOwnMessage ? 'You' : (session.otherParticipant?.name || 'User'),
               createdAt,
-              isRead: false,
+              isRead: isOwnMessage,
             },
-            unreadCount: senderId !== currentUserId && activeSessionId !== sessionId
-              ? session.unreadCount + 1
-              : session.unreadCount,
-            updatedAt: createdAt, // Update session timestamp
+            unreadCount,
+            updatedAt: createdAt,
           };
 
-          // Move updated session to top
-          updatedSessions.sort((a, b) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          const updatedSessions = [...prevSessions];
+          updatedSessions[sessionIndex] = updatedSession;
+          updatedSessions.sort(
+            (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
           );
-
           return updatedSessions;
         });
       } else if (message.type === 'READ_RECEIPT' && message.payload?.userId === currentUserId) {
-        // Clear unread count when messages are read
         const { sessionId } = message.payload;
-
         setSessions((prevSessions) =>
-          prevSessions.map((session) => {
-            if (session.id === sessionId) {
-              return {
-                ...session,
-                unreadCount: 0,
-              };
-            }
-            return session;
-          })
+          prevSessions.map((session) =>
+            session.id === sessionId && session.unreadCount > 0
+              ? { ...session, unreadCount: 0 }
+              : session
+          )
         );
       }
     });
@@ -197,22 +250,34 @@ export default function SessionList({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 relative">
       {sessions.map((session) => {
         const participant = session.otherParticipant;
         const displayName = participant?.name || 'Unknown User';
         const displayImage = participant?.picture || '/placeholder-avatar.png';
         const isActive = activeSessionId === session.id;
 
-        const messageTextClass = isActive
-          ? 'text-white/90'
-          : session.unreadCount > 0
-            ? 'font-medium text-white'
-            : 'text-slate-400';
+        const messageTextClass = getMessageTextClass(isActive, session.unreadCount);
+
+        const handleDelete = (event: MouseEvent<HTMLButtonElement>) => {
+          event.stopPropagation();
+          setPendingDelete(session);
+        };
+
+        const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            handleSessionClick(session);
+          }
+        };
+
         return (
-          <button
+          <div
             key={session.id}
+            role="button"
+            tabIndex={0}
             onClick={() => handleSessionClick(session)}
+            onKeyDown={handleRowKeyDown}
             className={`group flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-all duration-200 ${isActive
               ? 'bg-white/10 border border-white/15 shadow-[0_20px_40px_rgba(15,23,42,0.7)] backdrop-blur-md text-white'
               : 'bg-white/5 text-slate-100 hover:bg-[#152248]'
@@ -272,7 +337,7 @@ export default function SessionList({
                     No messages yet
                   </p>
                 )}
-                {session.unreadCount > 0 && (
+            {session.unreadCount > 0 && (
                   <span className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${isActive
                       ? 'bg-white text-[#1f2937]'
                       : 'bg-[#38bdf8] text-black'
@@ -280,11 +345,46 @@ export default function SessionList({
                     {session.unreadCount}
                   </span>
                 )}
+            <button
+              onClick={handleDelete}
+              className="ml-3 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-rose-200 hover:text-white transition"
+            >
+              Delete
+            </button>
               </div>
             </div>
-          </button>
+          </div>
         );
       })}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#0f172a]/90 p-6 text-white shadow-[0_20px_60px_rgba(0,0,0,0.8)]">
+            <h3 className="text-lg font-semibold">
+              Delete conversation with {pendingDelete.otherParticipant?.name || 'this user'}?
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              This will remove the entire chat history permanently.
+            </p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="rounded-full bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

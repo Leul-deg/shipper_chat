@@ -43,15 +43,7 @@ export default function UserList({ onUserClick, currentUserId }: UserListProps) 
     }
   };
 
-  // Set up WebSocket connection for real-time updates
-  const { isConnected, subscribe } = useWebSocket({
-    onOpen: () => {
-      console.log('WebSocket connected');
-    },
-    onClose: () => {
-      console.log('WebSocket disconnected');
-    },
-  });
+  const { isConnected, subscribe } = useWebSocket();
 
   // Subscribe to user status updates
   useEffect(() => {

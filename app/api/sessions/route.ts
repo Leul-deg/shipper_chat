@@ -158,42 +158,7 @@ export async function POST(request: NextRequest) {
 
     let targetUserId = otherUserIdToUse;
 
-    // Check if a session already exists between these two users
-    const existingSession = await prisma.chatSession.findFirst({
-      where: {
-        isGroup: false,
-        participants: {
-      every: {
-        userId: {
-          in: [session.user.id, targetUserId],
-        },
-      },
-        },
-      },
-      include: {
-        participants: true,
-      },
-    });
-
-    // Verify that the existing session has exactly these two users
-    if (existingSession) {
-      const participantIds = existingSession.participants.map((p) => p.userId);
-      if (
-        participantIds.includes(session.user.id) &&
-        participantIds.includes(targetUserId) &&
-        participantIds.length === 2
-      ) {
-        // Return existing session
-        return NextResponse.json({
-          session: {
-            id: existingSession.id,
-            message: 'Session already exists',
-          },
-        });
-      }
-    }
-
-    // Check if this is an AI chat request (special handling)
+    // Check if this is an AI chat request (special handling) - resolve AI user first
     if (targetUserId === 'ai-user-placeholder' || targetUserId.startsWith('ai-')) {
       // Find or create AI user
       let aiUser = await prisma.user.findFirst({
@@ -212,6 +177,69 @@ export async function POST(request: NextRequest) {
       }
 
       targetUserId = aiUser.id;
+    }
+
+    // Check if a session already exists between these two users
+    const existingSession = await prisma.chatSession.findFirst({
+      where: {
+        isGroup: false,
+        participants: {
+          every: {
+            userId: {
+              in: [session.user.id, targetUserId],
+            },
+          },
+        },
+      },
+      include: {
+        participants: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+                picture: true,
+                isOnline: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Verify that the existing session has exactly these two users
+    if (existingSession) {
+      const participantIds = existingSession.participants.map((p) => p.userId);
+      if (
+        participantIds.includes(session.user.id) &&
+        participantIds.includes(targetUserId) &&
+        participantIds.length === 2
+      ) {
+        // Return existing session with full details
+        const otherParticipant = existingSession.participants.find(
+          (p) => p.userId !== session.user.id
+        )?.user;
+
+        return NextResponse.json({
+          session: {
+            id: existingSession.id,
+            isGroup: existingSession.isGroup,
+            createdAt: existingSession.createdAt.toISOString(),
+            updatedAt: existingSession.updatedAt.toISOString(),
+            otherParticipant: otherParticipant
+              ? {
+                  id: otherParticipant.id,
+                  name: otherParticipant.name || otherParticipant.email?.split('@')[0] || 'User',
+                  email: otherParticipant.email,
+                  picture: otherParticipant.picture || otherParticipant.image || null,
+                  isOnline: otherParticipant.isOnline,
+                }
+              : null,
+          },
+        });
+      }
     }
 
     // Verify the other user exists
@@ -259,6 +287,9 @@ export async function POST(request: NextRequest) {
     const otherParticipant = newSession.participants.find(
       (p) => p.userId !== session.user.id
     )?.user;
+
+    // Don't broadcast SESSION_CREATED here - the session will appear on the other user's
+    // sidebar only after the first message is sent (via MESSAGE_RECEIVED handler)
 
     return NextResponse.json({
       session: {

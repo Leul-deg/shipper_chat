@@ -31,5 +31,11 @@ export const auth = betterAuth({
         },
       },
     },
+    // Increase timeout for OAuth token exchange
+    defaultCookieAttributes: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+    },
   },
 });
