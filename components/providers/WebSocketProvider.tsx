@@ -164,9 +164,19 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     useEffect(() => {
-        console.log('[WebSocketProvider] 🚀 Provider mounted, initializing connection');
-        connect();
+        let isMounted = true;
+        
+        // Small delay to prevent rapid reconnections on hot reload
+        const initTimeout = setTimeout(() => {
+            if (isMounted && !wsRef.current) {
+                console.log('[WebSocketProvider] 🚀 Provider mounted, initializing connection');
+                connect();
+            }
+        }, 100);
+        
         return () => {
+            isMounted = false;
+            clearTimeout(initTimeout);
             console.log('[WebSocketProvider] 💀 Provider unmounting, closing connection');
             disconnect();
         };

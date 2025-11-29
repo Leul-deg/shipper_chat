@@ -1,5 +1,6 @@
 # Docker Compose for local development/testing
 # Usage: docker-compose up --build
+# Uses external PostgreSQL - no local DB container
 
 version: '3.8'
 
@@ -8,13 +9,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"   # Next.js + WebSocket (same port)
+    network_mode: "host"
     env_file:
       - .env.local
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
     restart: unless-stopped
-
